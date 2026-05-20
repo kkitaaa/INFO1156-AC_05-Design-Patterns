@@ -12,7 +12,10 @@ import {
 import { CommentEntity } from "@/posts/entities/comment.entity"
 import { LikeEntity } from "@/posts/entities/like.entity"
 import { PostEntity } from "@/posts/entities/post.entity"
-import { legacyModerationApi } from "@/posts/legacy-moderation.client"
+import { LegacyModerationAdapter } from "@/posts/moderation/legacy-moderation.adapter"
+// CAMBIO 1: reemplazo por adapter que normaliza las respuestas de la api legacy de moderacion.
+// en lugar de importar la api directamente usamos el adapter que siempre
+// devuelve un ModerationResult estandar { blocked, reason }.
 import { PrismaService } from "@/prisma/prisma.service"
 
 import { PostsService } from "@/posts/posts.service"
@@ -223,23 +226,18 @@ export class PostsController {
             throw new BadRequestException("Comment too short")
         }
 
-        // Cliente legacy: devuelve tipos mixtos (string/number/object).
-        const moderation = legacyModerationApi.review(body.content)
+        // CAMBIO 2
+        // el adapter encapsula toda la logica de interpretacion de la api legacy,
+        // que puede devolver strings, números u objetos con formatos distintos.
 
-        let blocked = false
+        // gracias al adapter es que el controller solo trabaja con result.blocked,
+        // sin conocer los detalles internos del sistema de moderacion.
+        const moderationAdapter = new LegacyModerationAdapter()
+        const result = moderationAdapter.review(body.content)
 
-        if (moderation === "BLOCK") {
-            blocked = true
-        } else if (typeof moderation === "number") {
-            blocked = moderation < 1
-        } else if (typeof moderation === "object") {
-            blocked = !("pass" in moderation && moderation.pass)
-        } else if (moderation === "OK") {
-            blocked = false
-        }
-
-        if (blocked) {
+        if (result.blocked) {
             throw new BadRequestException("Comment blocked by moderation")
+
         }
 
         // Se persiste la información en la base de datos

@@ -260,7 +260,7 @@ export class PostsController {
             created.content.length > 60 ? 80 : 40,
             false,
             "es",
-            { moderation, source: "legacy" },
+            { moderation: result, source: "legacy" },
         )
 
         logDomainEvent("comment.created", { postId: id, commentId: created.id })

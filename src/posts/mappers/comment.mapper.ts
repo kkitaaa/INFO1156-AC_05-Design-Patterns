@@ -1,9 +1,11 @@
 import { CommentEntity } from "@/posts/entities/comment.entity"
+import { calcSentimentScore } from "@/posts/helpers/feed.helpers"
 
 export class CommentMapper {
-    // transforma un comentario crudo de prisma a CommenEntity.
-    // esto es util para mantener el controller limpio y desacoplado de la estructura de datos de prisma
-    // centraliza toda la logica de construccion para no repetirla en el controller.
+    // transforma un comentario crudo de prisma a CommentEntity
+
+    // el calculo de sentimentScore se delega a feed.helpers.ts
+    // esto para mantener este mapper enfocado en transformacion
     static toEntity(comment: {
         id: number
         postId: number
@@ -20,8 +22,8 @@ export class CommentMapper {
             comment.updatedAt,
             comment.source,
             "approved",
-            // comentarios largos tienen mayor puntaje de sentimiento
-            comment.content.length > 80 ? 70 : 45,
+            // delega el calculo de sentimiento al helper
+            calcSentimentScore(comment.content.length),
             comment.content.length % 2 === 0,
             "es",
             { chars: comment.content.length, source: comment.source },

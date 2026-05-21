@@ -16,9 +16,17 @@ export class LegacyModerationAdapter {
         if (typeof response === "object" && "pass" in response) {
             return { blocked: !response.pass, reason: response.reason }
         }
+        // solucion: separar el caso "OK" del fallback y en el fallback registrar el valor inesperado
+        if (response === "OK") {     
+            return { blocked: false }
+        }
 
-        // response === "OK" u otro caso
-        return { blocked: false }
+        // ACTUALIZACION: 
+        // fallback defensivo: la api legacy devolvio algo inesperado
+        // (null, undefined, o otro valor no contemplado)
+        // se registra en consola para trazabilidad y se permite el comentario.
+        console.warn("[moderation] respuesta inesperada de API legacy:", response)
+        return { blocked: false, reason: "unknown-legacy-response" }
     }
 }
 

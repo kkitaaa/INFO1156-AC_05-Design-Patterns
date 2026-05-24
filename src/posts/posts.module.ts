@@ -4,6 +4,9 @@ import { PostsService } from "@/posts/posts.service"
 import { PostFactory } from "@/posts/factories/post.factory"
 import { CommentFactory } from "@/posts/factories/comment.factory"
 import { LikeFactory } from "@/posts/factories/like.factory"
+import { PostRepository } from "@/posts/repositories/post.repository"
+import { CommentRepository } from "@/posts/repositories/comment.repository"
+import { LikeRepository } from "@/posts/repositories/like.repository"
 
 @Module({
     controllers: [PostsController],
@@ -15,6 +18,11 @@ import { LikeFactory } from "@/posts/factories/like.factory"
         PostFactory,
         CommentFactory,
         LikeFactory,
+
+        // Repositories - Encapsulamos acceso a datos
+        PostRepository,
+        CommentRepository,
+        LikeRepository,
     ],
 })
 export class PostsModule {}

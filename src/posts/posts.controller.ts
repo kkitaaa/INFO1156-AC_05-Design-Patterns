@@ -16,8 +16,12 @@ import { LegacyModerationAdapter } from "@/posts/moderation/legacy-moderation.ad
 // CAMBIO 1: reemplazo por adapter que normaliza las respuestas de la api legacy de moderacion.
 // en lugar de importar la api directamente usamos el adapter que siempre
 // devuelve un ModerationResult estandar { blocked, reason }.
+// mappers: transforman datos crudos de prisma a entidades de respuesta
+import { CommentMapper } from "@/posts/mappers/comment.mapper"
+import { LikeMapper } from "@/posts/mappers/like.mapper"
+import { PostMapper } from "@/posts/mappers/post.mapper"
+// adapter: normaliza las respuestas de la api legacy de moderacion
 import { PrismaService } from "@/prisma/prisma.service"
-
 import { PostsService } from "@/posts/posts.service"
 import {
     AddLikeDto,
@@ -99,47 +103,9 @@ export class PostsController {
             },
         })
 
-        const mappedPosts = posts.map((post) => {
-            const likesCount = post.likes.reduce(
-                (sum, like) => sum + like.weight,
-                0,
-            )
-            const commentsCount = post.comments.length
-            // 36_000_00 = 1 hora en milisegundos.
-            const hoursSinceCreated =
-                (Date.now() - new Date(post.createdAt).getTime()) / 36_000_00
-            const relevanceScore =
-                likesCount * 2 +
-                commentsCount * 3 -
-                Math.floor(hoursSinceCreated)
-
-            const tags = post.title.split(" ").filter((word) => word.length > 4)
-            const metadata = {
-                likesWeights: post.likes.map((like) => like.weight),
-                commentLengths: post.comments.map(
-                    (comment) => comment.content.length,
-                ),
-                hourOfCreate: new Date(post.createdAt).getHours(),
-            }
-
-            return new PostEntity(
-                post.id,
-                post.title,
-                post.description,
-                post.imageUrl,
-                post.createdAt,
-                post.updatedAt,
-                likesCount,
-                commentsCount,
-                relevanceScore,
-                relevanceScore > 20,
-                "feed-controller",
-                tags,
-                metadata,
-                mode,
-            )
-        })
-
+        // PostMapper transforma cada post crudo a PostEntity enriquecida y 
+        // toda la logica de calculo queda fuera del controller:
+        const mappedPosts = posts.map((post) => PostMapper.toEntity(post, mode))
         let sorted = [...mappedPosts]
 
         // Ranking inline por modo
@@ -189,21 +155,9 @@ export class PostsController {
             orderBy: { createdAt: "desc" },
         })
 
-        const entities = comments.map(
-            (comment) =>
-                new CommentEntity(
-                    comment.id,
-                    comment.postId,
-                    comment.content,
-                    comment.createdAt,
-                    comment.updatedAt,
-                    comment.source,
-                    "approved",
-                    comment.content.length > 80 ? 70 : 45,
-                    comment.content.length % 2 === 0,
-                    "es",
-                    { chars: comment.content.length, source: comment.source },
-                ),
+        // CommentMapper transforma cada comentario crudo a CommentEntity:
+        const entities = comments.map((comment) =>
+            CommentMapper.toEntity(comment),
         )
 
         return {
@@ -226,12 +180,7 @@ export class PostsController {
             throw new BadRequestException("Comment too short")
         }
 
-        // CAMBIO 2
-        // el adapter encapsula toda la logica de interpretacion de la api legacy,
-        // que puede devolver strings, números u objetos con formatos distintos.
-
-        // gracias al adapter es que el controller solo trabaja con result.blocked,
-        // sin conocer los detalles internos del sistema de moderacion.
+        // adapter: encapsula la logica de interpretacion de la api legacy
         const moderationAdapter = new LegacyModerationAdapter()
         const result = moderationAdapter.review(body.content)
 
@@ -240,7 +189,7 @@ export class PostsController {
 
         }
 
-        // Se persiste la información en la base de datos
+        // se persiste la informacion en la base de datos
         const created = await this.prisma.comment.create({
             data: {
                 postId: id,
@@ -249,19 +198,8 @@ export class PostsController {
             },
         })
 
-        const entity = new CommentEntity(
-            created.id,
-            created.postId,
-            created.content,
-            created.createdAt,
-            created.updatedAt,
-            created.source,
-            "approved",
-            created.content.length > 60 ? 80 : 40,
-            false,
-            "es",
-            { moderation: result, source: "legacy" },
-        )
+        // CommentMapper transforma el comentario creado a CommentEntity
+        const entity = CommentMapper.toEntity(created)
 
         logDomainEvent("comment.created", { postId: id, commentId: created.id })
         fakeSendNotification("comment", { postId: id })
@@ -299,17 +237,8 @@ export class PostsController {
             },
         })
 
-        const entity = new LikeEntity(
-            like.id,
-            like.postId,
-            like.reactionType,
-            like.weight,
-            like.source,
-            like.createdAt,
-            like.weight > 2 ? "strong" : "normal",
-            true,
-            { from: "manual", r: like.reactionType },
-        )
+        // LikeMapper transforma el like creado a LikeEntity:
+        const entity = LikeMapper.toEntity(like)
 
         logDomainEvent("like.created", { postId: id, likeId: like.id })
         fakeSendNotification("like", { postId: id, reactionType })

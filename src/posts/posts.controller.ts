@@ -29,6 +29,9 @@ import {
     CreatePostDto,
     FeedQueryDto,
 } from "@/posts/posts.dtos"
+import { CreateCommentCommand } from "@/posts/commands/create-comment.command"
+import { LikePostCommand } from "@/posts/commands/like-post.command"
+import { CreatePostCommand } from "@/posts/commands/create-post.command"
 
 const logDomainEvent = (
     eventName: string,
@@ -67,7 +70,12 @@ export class PostsController {
             throw new BadRequestException("Image URL must start with http")
         }
 
-        const created = await this.postsService.create(body)
+        const command = new CreatePostCommand(
+            this.prisma,
+            body,
+        )
+
+const created = await command.execute()
 
         logDomainEvent("post.created", {
             postId: created.id,
@@ -189,14 +197,8 @@ export class PostsController {
 
         }
 
-        // se persiste la informacion en la base de datos
-        const created = await this.prisma.comment.create({
-            data: {
-                postId: id,
-                content: body.content,
-                source: "controller",
-            },
-        })
+        const command = new CreateCommentCommand(this.prisma, id, body)
+        const created = await command.execute()
 
         // CommentMapper transforma el comentario creado a CommentEntity
         const entity = CommentMapper.toEntity(created)
@@ -228,14 +230,8 @@ export class PostsController {
             throw new BadRequestException("Weight must be at least 1")
         }
 
-        const like = await this.prisma.like.create({
-            data: {
-                postId: id,
-                reactionType,
-                weight,
-                source: "controller",
-            },
-        })
+        const command = new LikePostCommand(this.prisma, id, body)
+        const like = await command.execute()
 
         // LikeMapper transforma el like creado a LikeEntity:
         const entity = LikeMapper.toEntity(like)

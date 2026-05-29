@@ -92,19 +92,10 @@ export class PostsService {
      * Podría cambiar a TypeORM/MongoDB y el servicio seguiría igual
      */
     async findAll(): Promise<PostEntity[]> {
-        // PASO 1: Obtener datos crudos del repository
         const posts = await this.postRepository.findAll()
 
-        // PASO 2: Enriquecer cada post con la factory
         return posts.map((post) =>
-            this.postFactory.createFromDatabase({
-                id: post.id,
-                title: post.title,
-                description: post.description,
-                imageUrl: post.imageUrl,
-                createdAt: post.createdAt,
-                updatedAt: post.updatedAt,
-            }),
+            PostMapper.toEntity(post, "latest"),
         )
     }
 
@@ -117,20 +108,11 @@ export class PostsService {
      * 3. Service retorna
      */
     async findById(id: number): Promise<PostEntity | null> {
-        // PASO 1: Repository obtiene
         const post = await this.postRepository.findById(id)
 
         if (!post) return null
 
-        // PASO 2: Factory enriquece
-        return this.postFactory.createFromDatabase({
-            id: post.id,
-            title: post.title,
-            description: post.description,
-            imageUrl: post.imageUrl,
-            createdAt: post.createdAt,
-            updatedAt: post.updatedAt,
-        })
+        return PostMapper.toEntity(post, "latest")
     }
 
     async getFeed(mode: string): Promise<PostEntity[]> {

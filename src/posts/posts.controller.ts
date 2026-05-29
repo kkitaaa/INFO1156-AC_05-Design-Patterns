@@ -56,24 +56,20 @@ export class PostsController {
 
     @Post()
     async create(@Body() body: CreatePostDto) {
-        const lengthValidator = new LengthValidator();
-        const moderationValidator = new ModerationValidator();
-        const spamValidator = new SpamValidator();
-        const profanityValidator = new ProfanityValidator();
+        const lengthValidator = new LengthValidator()
+        const moderationValidator = new ModerationValidator()
+        const spamValidator = new SpamValidator()
+        const profanityValidator = new ProfanityValidator()
 
         lengthValidator
             .setNext(moderationValidator)
             .setNext(spamValidator)
-            .setNext(profanityValidator);
+            .setNext(profanityValidator)
 
-        await lengthValidator.handle(body);
+        await lengthValidator.handle(body)
 
-        const command = new CreatePostCommand(this.prisma, body);
-        const created = await command.execute();
-
-        logDomainEvent("post.created", { postId: created.id, title: created.title });
-        fakeSendNotification("post", { postId: created.id });
-        fakeRecomputeSomething(created.id);
+        const command = new CreatePostCommand(this.prisma, body)
+        const created = await command.execute()
 
         return {
             ok: true,
@@ -84,6 +80,7 @@ export class PostsController {
     @Get()
     async findAll() {
         const posts = await this.postsService.findAll()
+
         return {
             total: posts.length,
             items: posts,
@@ -93,17 +90,11 @@ export class PostsController {
     @Get("feed")
     async getFeed(@Query() query: FeedQueryDto) {
         const mode = query.mode || "latest"
-        const posts = await this.postsService.findAll() as any[];
 
-        const mappedPosts: PostEntity[] = posts.map((post) => {
-            if (post.likes !== undefined && post.comments !== undefined) {
-                return post as PostEntity;
-            }
-            return PostMapper.toEntity(post, mode);
-        });
+        const posts = await this.postsService.getFeed(mode)
 
-        const strategy = this.feedStrategyFactory.getStrategy(mode);
-        const sorted = strategy.sort(mappedPosts);
+        const strategy = this.feedStrategyFactory.getStrategy(mode)
+        const sorted = strategy.sort(posts)
 
         return {
             mode,
@@ -115,16 +106,16 @@ export class PostsController {
     @Get(":id/comments")
     async getComments(@Param("id", ParseIntPipe) id: number) {
         const post = await this.postsService.findById(id)
+
         if (!post) {
             throw new NotFoundException("Post not found")
         }
 
-        const comments = (post as any).comments || []
-        const entities = comments.map((comment: any) => CommentMapper.toEntity(comment))
+        const comments = await this.postsService.getComments(id)
 
         return {
-            total_comments: entities.length,
-            comments: entities,
+            total_comments: comments.length,
+            comments,
         }
     }
 
@@ -134,9 +125,11 @@ export class PostsController {
         @Body() body: CreateCommentDto,
     ) {
         const post = await this.postsService.findById(id)
+
         if (!post) {
             throw new NotFoundException("Post not found")
         }
+
         if (body.content.length < 2) {
             throw new BadRequestException("Comment too short")
         }
@@ -150,11 +143,8 @@ export class PostsController {
 
         const command = new CreateCommentCommand(this.prisma, id, body)
         const created = await command.execute()
-        const entity = CommentMapper.toEntity(created)
 
-        logDomainEvent("comment.created", { postId: id, commentId: created.id })
-        fakeSendNotification("comment", { postId: id })
-        fakeRecomputeSomething(id)
+        const entity = CommentMapper.toEntity(created)
 
         return {
             message: "comment_created",
@@ -168,6 +158,7 @@ export class PostsController {
         @Body() body: AddLikeDto,
     ) {
         const post = await this.postsService.findById(id)
+
         if (!post) {
             throw new NotFoundException("Post not found")
         }
@@ -181,11 +172,8 @@ export class PostsController {
 
         const command = new LikePostCommand(this.prisma, id, body)
         const like = await command.execute()
-        const entity = LikeMapper.toEntity(like)
 
-        logDomainEvent("like.created", { postId: id, likeId: like.id })
-        fakeSendNotification("like", { postId: id, reactionType })
-        fakeRecomputeSomething(id)
+        const entity = LikeMapper.toEntity(like)
 
         return {
             success: true,

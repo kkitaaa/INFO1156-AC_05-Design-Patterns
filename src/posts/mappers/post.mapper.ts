@@ -22,24 +22,21 @@ export class PostMapper {
             imageUrl: string
             createdAt: Date
             updatedAt: Date
-            likes?: { weight: number }[]
-            comments?: { content: string }[]
+            likes: { weight: number }[]
+            comments: { content: string }[]
         },
         mode: string,
     ): PostEntity {
-
-        const likesArr = post.likes ?? [];
-        const commentsArr = post.comments ?? [];
-        const likesCount = likesArr.reduce(
+        const likesCount = post.likes.reduce(
             (sum, like) => sum + like.weight,
             0,
-        );
-        const commentsCount = commentsArr.length;
+        )
+        const commentsCount = post.comments.length
         const relevanceScore = calcRelevanceScore(
             likesCount,
             commentsCount,
             post.createdAt,
-        );
+        )
 
         return new PostEntity(
             post.id,
@@ -54,8 +51,8 @@ export class PostMapper {
             calcIsFeatured(relevanceScore),
             "feed-controller",
             calcTags(post.title),
-            calcPostMetadata(likesArr, commentsArr, post.createdAt),
+            calcPostMetadata(post.likes, post.comments, post.createdAt),
             mode,
-        );
+        )
     }
 }

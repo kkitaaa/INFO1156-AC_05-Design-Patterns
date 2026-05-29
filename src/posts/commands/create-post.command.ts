@@ -5,24 +5,6 @@ import { CreatePostDto } from "@/posts/posts.dtos"
 
 import { Command } from "./command.interface"
 
-const logDomainEvent = (
-    eventName: string,
-    payload: Record<string, unknown>,
-) => {
-    console.log(`[event:${eventName}]`, payload)
-}
-
-const fakeSendNotification = (
-    type: string,
-    payload: Record<string, unknown>,
-) => {
-    console.log(`[notify:${type}]`, payload)
-}
-
-const fakeRecomputeSomething = (postId: number) => {
-    console.log(`[recompute] postId=${postId}`)
-}
-
 export class CreatePostCommand implements Command {
     constructor(
         private readonly prisma: PrismaService,
@@ -57,18 +39,6 @@ export class CreatePostCommand implements Command {
                 imageUrl: this.dto.imageUrl,
             },
         })
-
-        // side effects
-        logDomainEvent("post.created", {
-            postId: created.id,
-            title: created.title,
-        })
-
-        fakeSendNotification("post", {
-            postId: created.id,
-        })
-
-        fakeRecomputeSomething(created.id)
 
         return created
     }

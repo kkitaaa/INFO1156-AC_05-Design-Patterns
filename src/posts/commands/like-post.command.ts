@@ -8,26 +8,6 @@ import { AddLikeDto } from "@/posts/posts.dtos"
 
 import { Command } from "./command.interface"
 
-const logDomainEvent = (
-    eventName: string,
-    payload: Record<string, unknown>,
-) => {
-    console.log(`[event:${eventName}]`, payload)
-}
-
-const fakeSendNotification = (
-    type: string,
-    payload: Record<string, unknown>,
-) => {
-    console.log(`[notify:${type}]`, payload)
-}
-
-const fakeRecomputeSomething = (
-    postId: number,
-) => {
-    console.log(`[recompute] postId=${postId}`)
-}
-
 export class LikePostCommand
 implements Command {
     constructor(
@@ -61,27 +41,6 @@ implements Command {
                     source: "command",
                 },
             })
-
-        // side effects
-        logDomainEvent(
-            "like.created",
-            {
-                postId: this.postId,
-                likeId: created.id,
-            },
-        )
-
-        fakeSendNotification(
-            "like",
-            {
-                postId: this.postId,
-                reactionType,
-            },
-        )
-
-        fakeRecomputeSomething(
-            this.postId,
-        )
 
         return created
     }

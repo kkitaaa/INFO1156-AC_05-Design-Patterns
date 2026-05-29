@@ -26,6 +26,15 @@ Además, antes de persistir comentarios se aplica una validación/moderación pa
 
 La solución está construida con NestJS en backend, Prisma ORM y SQLite como almacenamiento local.
 
+## Arquitectura orientada a eventos
+
+La capa de posts ahora separa la lógica principal de los efectos secundarios mediante un gestor de eventos simple:
+
+- **separación de responsabilidades**: el comando persiste datos y el controlador dispara eventos;
+- **bajo acoplamiento**: los observers (`logger`, `notification`, `recompute`) no dependen del flujo principal;
+- **facilidad para extender**: agregar otro observer requiere solo implementar la interfaz `Observer`;
+- **arquitectura orientada a eventos**: nuevas acciones pueden reaccionar a eventos como `post.created`, `comment.created` o `like.created` sin modificar la lógica del caso de uso.
+
 La base de datos es fija en `sqlite.db`
 
 ## Ejecución:

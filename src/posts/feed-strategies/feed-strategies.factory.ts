@@ -11,9 +11,11 @@ export class FeedStrategyFactory {
     switch (mode?.toLowerCase()) {
       case 'latest':
         return new LatestFeedStrategy();
+      case 'mostliked':
       case 'most_liked':
       case 'liked':
         return new MostLikedStrategy();
+      case 'mostcommented':
       case 'most_commented':
       case 'commented':
         return new MostCommentedStrategy();

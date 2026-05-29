@@ -33,18 +33,7 @@ import { LengthValidator } from "./validators/lenght.validator"
 import { ModerationValidator } from "./validators/moderation.validator"
 import { SpamValidator } from "./validators/spam.validator"
 import { ProfanityValidator } from "./validators/profanity.validator"
-
-const logDomainEvent = (eventName: string, payload: Record<string, unknown>) => {
-    console.log(`[event:${eventName}]`, payload)
-}
-
-const fakeSendNotification = (type: string, payload: Record<string, unknown>) => {
-    console.log(`[notify:${type}]`, payload)
-}
-
-const fakeRecomputeSomething = (postId: number) => {
-    console.log(`[recompute] postId=${postId}`)
-}
+import { eventManager } from "@/common/events/event-manager"
 
 @Controller("api/posts")
 export class PostsController {
@@ -70,6 +59,11 @@ export class PostsController {
 
         const command = new CreatePostCommand(this.prisma, body)
         const created = await command.execute()
+
+        eventManager.notify("post.created", {
+            postId: created.id,
+            title: created.title,
+        })
 
         return {
             ok: true,
@@ -144,6 +138,11 @@ export class PostsController {
         const command = new CreateCommentCommand(this.prisma, id, body)
         const created = await command.execute()
 
+        eventManager.notify("comment.created", {
+            postId: id,
+            commentId: created.id,
+        })
+
         const entity = CommentMapper.toEntity(created)
 
         return {
@@ -172,6 +171,12 @@ export class PostsController {
 
         const command = new LikePostCommand(this.prisma, id, body)
         const like = await command.execute()
+
+        eventManager.notify("like.created", {
+            postId: id,
+            likeId: like.id,
+            reactionType: body.reactionType || "like",
+        })
 
         const entity = LikeMapper.toEntity(like)
 

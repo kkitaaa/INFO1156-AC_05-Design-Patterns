@@ -9,6 +9,7 @@ import { LikeRepository } from "@/posts/repositories/like.repository"
 import { PostEntity } from "@/posts/entities/post.entity"
 import { CommentEntity } from "@/posts/entities/comment.entity"
 import { LikeEntity } from "@/posts/entities/like.entity"
+import { PostMapper } from "@/posts/mappers/post.mapper"
 
 /**
  * PostsService - Servicio de Posts
@@ -130,6 +131,46 @@ export class PostsService {
             createdAt: post.createdAt,
             updatedAt: post.updatedAt,
         })
+    }
+
+    async getFeed(mode: string): Promise<PostEntity[]> {
+        const posts = await this.postRepository.findFeed()
+        const mappedPosts = posts.map((post) => PostMapper.toEntity(post, mode))
+        let sorted = [...mappedPosts]
+
+        switch (mode) {
+            case "mostLiked":
+                sorted = sorted.sort((a, b) => b.likesCount - a.likesCount)
+                break
+            case "mostCommented":
+                sorted = sorted.sort((a, b) => b.commentsCount - a.commentsCount)
+                break
+            case "relevance":
+                sorted = sorted.sort((a, b) => b.relevanceScore - a.relevanceScore)
+                break
+            case "latest":
+            default:
+                sorted = sorted.sort(
+                    (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+                )
+                break
+        }
+
+        return sorted
+    }
+
+    async getComments(postId: number): Promise<CommentEntity[]> {
+        const comments = await this.commentRepository.findByPostId(postId)
+        return comments.map((comment) =>
+            this.commentFactory.createFromDatabase({
+                id: comment.id,
+                postId: comment.postId,
+                content: comment.content,
+                createdAt: comment.createdAt,
+                updatedAt: comment.updatedAt,
+                source: comment.source,
+            }),
+        )
     }
 
     /**

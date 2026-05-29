@@ -13,15 +13,6 @@ import { CommentEntity } from "@/posts/entities/comment.entity"
 import { LikeEntity } from "@/posts/entities/like.entity"
 import { PostEntity } from "@/posts/entities/post.entity"
 import { LegacyModerationAdapter } from "@/posts/moderation/legacy-moderation.adapter"
-// CAMBIO 1: reemplazo por adapter que normaliza las respuestas de la api legacy de moderacion.
-// en lugar de importar la api directamente usamos el adapter que siempre
-// devuelve un ModerationResult estandar { blocked, reason }.
-// mappers: transforman datos crudos de prisma a entidades de respuesta
-import { CommentMapper } from "@/posts/mappers/comment.mapper"
-import { LikeMapper } from "@/posts/mappers/like.mapper"
-import { PostMapper } from "@/posts/mappers/post.mapper"
-// adapter: normaliza las respuestas de la api legacy de moderacion
-import { PrismaService } from "@/prisma/prisma.service"
 import { PostsService } from "@/posts/posts.service"
 import {
     AddLikeDto,
@@ -50,10 +41,7 @@ const fakeRecomputeSomething = (postId: number) => {
 
 @Controller("api/posts")
 export class PostsController {
-    constructor(
-        private readonly postsService: PostsService,
-        private readonly prisma: PrismaService,
-    ) {}
+    constructor(private readonly postsService: PostsService) {}
 
     @Post()
     async create(@Body() body: CreatePostDto) {
@@ -95,51 +83,12 @@ export class PostsController {
     @Get("feed")
     async getFeed(@Query() query: FeedQueryDto) {
         const mode = query.mode || "latest"
-
-        const posts = await this.prisma.post.findMany({
-            include: {
-                comments: true,
-                likes: true,
-            },
-        })
-
-        // PostMapper transforma cada post crudo a PostEntity enriquecida y 
-        // toda la logica de calculo queda fuera del controller:
-        const mappedPosts = posts.map((post) => PostMapper.toEntity(post, mode))
-        let sorted = [...mappedPosts]
-
-        // Ranking inline por modo
-        // Esto define la forma de ordenar en base al filtro
-        switch (mode) {
-            case "latest":
-                sorted = sorted.sort(
-                    (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-                )
-                break
-            case "mostLiked":
-                sorted = sorted.sort((a, b) => b.likesCount - a.likesCount)
-                break
-            case "mostCommented":
-                sorted = sorted.sort(
-                    (a, b) => b.commentsCount - a.commentsCount,
-                )
-                break
-            case "relevance":
-                sorted = sorted.sort(
-                    (a, b) => b.relevanceScore - a.relevanceScore,
-                )
-                break
-            default:
-                sorted = sorted.sort(
-                    (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-                )
-                break
-        }
+        const rows = await this.postsService.getFeed(mode)
 
         return {
             mode,
-            count: sorted.length,
-            rows: sorted,
+            count: rows.length,
+            rows,
         }
     }
 
@@ -150,19 +99,11 @@ export class PostsController {
             throw new NotFoundException("Post not found")
         }
 
-        const comments = await this.prisma.comment.findMany({
-            where: { postId: id },
-            orderBy: { createdAt: "desc" },
-        })
-
-        // CommentMapper transforma cada comentario crudo a CommentEntity:
-        const entities = comments.map((comment) =>
-            CommentMapper.toEntity(comment),
-        )
+        const comments = await this.postsService.getComments(id)
 
         return {
-            total_comments: entities.length,
-            comments: entities,
+            total_comments: comments.length,
+            comments,
         }
     }
 
@@ -190,16 +131,7 @@ export class PostsController {
         }
 
         // se persiste la informacion en la base de datos
-        const created = await this.prisma.comment.create({
-            data: {
-                postId: id,
-                content: body.content,
-                source: "controller",
-            },
-        })
-
-        // CommentMapper transforma el comentario creado a CommentEntity
-        const entity = CommentMapper.toEntity(created)
+        const created = await this.postsService.createComment(id, body)
 
         logDomainEvent("comment.created", { postId: id, commentId: created.id })
         fakeSendNotification("comment", { postId: id })
@@ -207,7 +139,7 @@ export class PostsController {
 
         return {
             message: "comment_created",
-            entity,
+            entity: created,
         }
     }
 
@@ -228,17 +160,7 @@ export class PostsController {
             throw new BadRequestException("Weight must be at least 1")
         }
 
-        const like = await this.prisma.like.create({
-            data: {
-                postId: id,
-                reactionType,
-                weight,
-                source: "controller",
-            },
-        })
-
-        // LikeMapper transforma el like creado a LikeEntity:
-        const entity = LikeMapper.toEntity(like)
+        const like = await this.postsService.addLike(id, body)
 
         logDomainEvent("like.created", { postId: id, likeId: like.id })
         fakeSendNotification("like", { postId: id, reactionType })
@@ -246,7 +168,7 @@ export class PostsController {
 
         return {
             success: true,
-            like: entity,
+            like,
         }
     }
 }

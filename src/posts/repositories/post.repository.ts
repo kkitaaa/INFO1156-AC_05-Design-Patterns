@@ -51,6 +51,16 @@ export class PostRepository {
         })
     }
 
+    async findFeed() {
+        return this.prisma.post.findMany({
+            include: {
+                comments: true,
+                likes: true,
+            },
+            orderBy: { createdAt: "desc" },
+        })
+    }
+
     /**
      * MÉTODO PRIVADO - Obtiene posts con conteos de likes y comentarios
      */

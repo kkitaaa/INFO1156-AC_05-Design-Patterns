@@ -7,6 +7,7 @@ import { LikeFactory } from "@/posts/factories/like.factory"
 import { PostRepository } from "@/posts/repositories/post.repository"
 import { CommentRepository } from "@/posts/repositories/comment.repository"
 import { LikeRepository } from "@/posts/repositories/like.repository"
+import { FeedStrategyFactory } from "@/posts/feed-strategies/feed-strategies.factory"
 
 @Module({
     controllers: [PostsController],
@@ -18,6 +19,9 @@ import { LikeRepository } from "@/posts/repositories/like.repository"
         PostFactory,
         CommentFactory,
         LikeFactory,
+        
+        // Nueva Factory para el patrón Strategy
+        FeedStrategyFactory,
 
         // Repositories - Encapsulamos acceso a datos
         PostRepository,

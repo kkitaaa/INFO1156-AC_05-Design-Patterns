@@ -1,4 +1,3 @@
-
 import {
     BadRequestException,
     Body,
@@ -28,6 +27,7 @@ import {
 import { CreateCommentCommand } from "@/posts/commands/create-comment.command"
 import { LikePostCommand } from "@/posts/commands/like-post.command"
 import { CreatePostCommand } from "@/posts/commands/create-post.command"
+import { FeedStrategyFactory } from "@/posts/feed-strategies/feed-strategies.factory"
 
 const logDomainEvent = (
     eventName: string,
@@ -53,6 +53,8 @@ export class PostsController {
     constructor(
         private readonly postsService: PostsService,
         private readonly prisma: PrismaService,
+        // 2. INYECCIÓN DE LA FACTORY
+        private readonly feedStrategyFactory: FeedStrategyFactory,
     ) {}
 
     @Post()
@@ -101,46 +103,21 @@ export class PostsController {
     @Get("feed")
     async getFeed(@Query() query: FeedQueryDto) {
         const mode = query.mode || "latest"
+        const posts = await this.postsService.findAll() as any[];
 
-        const posts = await this.prisma.post.findMany({
-            include: {
-                comments: true,
-                likes: true,
-            },
-        })
 
-        // PostMapper transforma cada post crudo a PostEntity enriquecida y 
-        // toda la logica de calculo queda fuera del controller:
-        const mappedPosts = posts.map((post) => PostMapper.toEntity(post, mode))
-        let sorted = [...mappedPosts]
 
-        // Ranking inline por modo
-        // Esto define la forma de ordenar en base al filtro
-        switch (mode) {
-            case "latest":
-                sorted = sorted.sort(
-                    (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-                )
-                break
-            case "mostLiked":
-                sorted = sorted.sort((a, b) => b.likesCount - a.likesCount)
-                break
-            case "mostCommented":
-                sorted = sorted.sort(
-                    (a, b) => b.commentsCount - a.commentsCount,
-                )
-                break
-            case "relevance":
-                sorted = sorted.sort(
-                    (a, b) => b.relevanceScore - a.relevanceScore,
-                )
-                break
-            default:
-                sorted = sorted.sort(
-                    (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-                )
-                break
-        }
+        const mappedPosts: PostEntity[] = posts.map((post) => {
+            if (post.likes !== undefined && post.comments !== undefined) {
+                return post as PostEntity;
+            }
+            return PostMapper.toEntity(post, mode);
+        });
+
+        const strategy = this.feedStrategyFactory.getStrategy(mode)
+
+
+        const sorted = strategy.sort(mappedPosts)
 
         return {
             mode,
@@ -157,13 +134,8 @@ export class PostsController {
             throw new NotFoundException("Post not found")
         }
 
-        const comments = await this.prisma.comment.findMany({
-            where: { postId: id },
-            orderBy: { createdAt: "desc" },
-        })
-
-        // CommentMapper transforma cada comentario crudo a CommentEntity:
-        const entities = comments.map((comment) =>
+        const comments = (post as any).comments || []
+        const entities = comments.map((comment: any) =>
             CommentMapper.toEntity(comment),
         )
 
@@ -188,7 +160,6 @@ export class PostsController {
             throw new BadRequestException("Comment too short")
         }
 
-        // adapter: encapsula la logica de interpretacion de la api legacy
         const moderationAdapter = new LegacyModerationAdapter()
         const result = moderationAdapter.review(body.content)
 
@@ -199,7 +170,6 @@ export class PostsController {
         const command = new CreateCommentCommand(this.prisma, id, body)
         const created = await command.execute()
 
-        // CommentMapper transforma el comentario creado a CommentEntity
         const entity = CommentMapper.toEntity(created)
 
         logDomainEvent("comment.created", { postId: id, commentId: created.id })
@@ -232,7 +202,6 @@ export class PostsController {
         const command = new LikePostCommand(this.prisma, id, body)
         const like = await command.execute()
 
-        // LikeMapper transforma el like creado a LikeEntity:
         const entity = LikeMapper.toEntity(like)
 
         logDomainEvent("like.created", { postId: id, likeId: like.id })

@@ -30,6 +30,15 @@ La solución está construida con NestJS en backend, Prisma ORM y SQLite como al
 
 La capa de posts ahora separa la lógica principal de los efectos secundarios mediante un gestor de eventos simple:
 
+## Separación de responsabilidades con Service Layer
+
+La lógica de negocio se movió fuera del controller hacia un servicio dedicado en [src/posts/services/posts.service.ts](src/posts/services/posts.service.ts), lo que permite:
+
+- separación HTTP / lógica de negocio;
+- arquitectura escalable y mantenible;
+- reutilización del mismo servicio en otras capas o pruebas;
+- menor acoplamiento entre rutas y reglas de negocio.
+
 - **separación de responsabilidades**: el comando persiste datos y el controlador dispara eventos;
 - **bajo acoplamiento**: los observers (`logger`, `notification`, `recompute`) no dependen del flujo principal;
 - **facilidad para extender**: agregar otro observer requiere solo implementar la interfaz `Observer`;

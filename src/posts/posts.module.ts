@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common"
 import { PostsController } from "@/posts/posts.controller"
-import { PostsService } from "@/posts/posts.service"
+import { PostsService } from "@/posts/services/posts.service"
 import { PostFactory } from "@/posts/factories/post.factory"
 import { CommentFactory } from "@/posts/factories/comment.factory"
 import { LikeFactory } from "@/posts/factories/like.factory"

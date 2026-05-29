@@ -27,19 +27,18 @@ import {
 import { CreateCommentCommand } from "@/posts/commands/create-comment.command"
 import { LikePostCommand } from "@/posts/commands/like-post.command"
 import { CreatePostCommand } from "@/posts/commands/create-post.command"
-import { FeedStrategyFactory } from "@/posts/feed-strategies/feed-strategies.factory"
 
-const logDomainEvent = (
-    eventName: string,
-    payload: Record<string, unknown>,
-) => {
+import { FeedStrategyFactory } from "./feed-strategies/feed-strategies.factory"
+import { LengthValidator } from "./validators/lenght.validator"
+import { ModerationValidator } from "./validators/moderation.validator"
+import { SpamValidator } from "./validators/spam.validator"
+import { ProfanityValidator } from "./validators/profanity.validator"
+
+const logDomainEvent = (eventName: string, payload: Record<string, unknown>) => {
     console.log(`[event:${eventName}]`, payload)
 }
 
-const fakeSendNotification = (
-    type: string,
-    payload: Record<string, unknown>,
-) => {
+const fakeSendNotification = (type: string, payload: Record<string, unknown>) => {
     console.log(`[notify:${type}]`, payload)
 }
 
@@ -47,41 +46,34 @@ const fakeRecomputeSomething = (postId: number) => {
     console.log(`[recompute] postId=${postId}`)
 }
 
-
 @Controller("api/posts")
 export class PostsController {
     constructor(
         private readonly postsService: PostsService,
         private readonly prisma: PrismaService,
-        // 2. INYECCIÓN DE LA FACTORY
         private readonly feedStrategyFactory: FeedStrategyFactory,
     ) {}
 
     @Post()
     async create(@Body() body: CreatePostDto) {
-        if (body.title.length < 3 || body.title.length > 120) {
-            throw new BadRequestException(
-                "Title length must be between 3 and 120",
-            )
-        }
+        const lengthValidator = new LengthValidator();
+        const moderationValidator = new ModerationValidator();
+        const spamValidator = new SpamValidator();
+        const profanityValidator = new ProfanityValidator();
 
-        if (!body.imageUrl.startsWith("http")) {
-            throw new BadRequestException("Image URL must start with http")
-        }
+        lengthValidator
+            .setNext(moderationValidator)
+            .setNext(spamValidator)
+            .setNext(profanityValidator);
 
-        const command = new CreatePostCommand(
-            this.prisma,
-            body,
-        )
+        await lengthValidator.handle(body);
 
-        const created = await command.execute()
+        const command = new CreatePostCommand(this.prisma, body);
+        const created = await command.execute();
 
-        logDomainEvent("post.created", {
-            postId: created.id,
-            title: created.title,
-        })
-        fakeSendNotification("post", { postId: created.id })
-        fakeRecomputeSomething(created.id)
+        logDomainEvent("post.created", { postId: created.id, title: created.title });
+        fakeSendNotification("post", { postId: created.id });
+        fakeRecomputeSomething(created.id);
 
         return {
             ok: true,
@@ -92,20 +84,16 @@ export class PostsController {
     @Get()
     async findAll() {
         const posts = await this.postsService.findAll()
-
         return {
             total: posts.length,
             items: posts,
         }
     }
 
-
     @Get("feed")
     async getFeed(@Query() query: FeedQueryDto) {
         const mode = query.mode || "latest"
         const posts = await this.postsService.findAll() as any[];
-
-
 
         const mappedPosts: PostEntity[] = posts.map((post) => {
             if (post.likes !== undefined && post.comments !== undefined) {
@@ -114,10 +102,8 @@ export class PostsController {
             return PostMapper.toEntity(post, mode);
         });
 
-        const strategy = this.feedStrategyFactory.getStrategy(mode)
-
-
-        const sorted = strategy.sort(mappedPosts)
+        const strategy = this.feedStrategyFactory.getStrategy(mode);
+        const sorted = strategy.sort(mappedPosts);
 
         return {
             mode,
@@ -125,7 +111,6 @@ export class PostsController {
             rows: sorted,
         }
     }
-
 
     @Get(":id/comments")
     async getComments(@Param("id", ParseIntPipe) id: number) {
@@ -135,16 +120,13 @@ export class PostsController {
         }
 
         const comments = (post as any).comments || []
-        const entities = comments.map((comment: any) =>
-            CommentMapper.toEntity(comment),
-        )
+        const entities = comments.map((comment: any) => CommentMapper.toEntity(comment))
 
         return {
             total_comments: entities.length,
             comments: entities,
         }
     }
-
 
     @Post(":id/comments")
     async createComment(
@@ -155,7 +137,6 @@ export class PostsController {
         if (!post) {
             throw new NotFoundException("Post not found")
         }
-
         if (body.content.length < 2) {
             throw new BadRequestException("Comment too short")
         }
@@ -169,7 +150,6 @@ export class PostsController {
 
         const command = new CreateCommentCommand(this.prisma, id, body)
         const created = await command.execute()
-
         const entity = CommentMapper.toEntity(created)
 
         logDomainEvent("comment.created", { postId: id, commentId: created.id })
@@ -201,7 +181,6 @@ export class PostsController {
 
         const command = new LikePostCommand(this.prisma, id, body)
         const like = await command.execute()
-
         const entity = LikeMapper.toEntity(like)
 
         logDomainEvent("like.created", { postId: id, likeId: like.id })

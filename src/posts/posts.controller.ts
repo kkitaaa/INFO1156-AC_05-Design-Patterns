@@ -1,3 +1,4 @@
+
 import {
     BadRequestException,
     Body,
@@ -13,6 +14,10 @@ import { CommentEntity } from "@/posts/entities/comment.entity"
 import { LikeEntity } from "@/posts/entities/like.entity"
 import { PostEntity } from "@/posts/entities/post.entity"
 import { LegacyModerationAdapter } from "@/posts/moderation/legacy-moderation.adapter"
+import { CommentMapper } from "@/posts/mappers/comment.mapper"
+import { LikeMapper } from "@/posts/mappers/like.mapper"
+import { PostMapper } from "@/posts/mappers/post.mapper"
+import { PrismaService } from "@/prisma/prisma.service"
 import { PostsService } from "@/posts/posts.service"
 import {
     AddLikeDto,
@@ -20,6 +25,9 @@ import {
     CreatePostDto,
     FeedQueryDto,
 } from "@/posts/posts.dtos"
+import { CreateCommentCommand } from "@/posts/commands/create-comment.command"
+import { LikePostCommand } from "@/posts/commands/like-post.command"
+import { CreatePostCommand } from "@/posts/commands/create-post.command"
 
 const logDomainEvent = (
     eventName: string,
@@ -39,9 +47,13 @@ const fakeRecomputeSomething = (postId: number) => {
     console.log(`[recompute] postId=${postId}`)
 }
 
+
 @Controller("api/posts")
 export class PostsController {
-    constructor(private readonly postsService: PostsService) {}
+    constructor(
+        private readonly postsService: PostsService,
+        private readonly prisma: PrismaService,
+    ) {}
 
     @Post()
     async create(@Body() body: CreatePostDto) {
@@ -55,7 +67,12 @@ export class PostsController {
             throw new BadRequestException("Image URL must start with http")
         }
 
-        const created = await this.postsService.create(body)
+        const command = new CreatePostCommand(
+            this.prisma,
+            body,
+        )
+
+        const created = await command.execute()
 
         logDomainEvent("post.created", {
             postId: created.id,
@@ -80,17 +97,58 @@ export class PostsController {
         }
     }
 
+
     @Get("feed")
     async getFeed(@Query() query: FeedQueryDto) {
         const mode = query.mode || "latest"
-        const rows = await this.postsService.getFeed(mode)
+
+        const posts = await this.prisma.post.findMany({
+            include: {
+                comments: true,
+                likes: true,
+            },
+        })
+
+        // PostMapper transforma cada post crudo a PostEntity enriquecida y 
+        // toda la logica de calculo queda fuera del controller:
+        const mappedPosts = posts.map((post) => PostMapper.toEntity(post, mode))
+        let sorted = [...mappedPosts]
+
+        // Ranking inline por modo
+        // Esto define la forma de ordenar en base al filtro
+        switch (mode) {
+            case "latest":
+                sorted = sorted.sort(
+                    (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+                )
+                break
+            case "mostLiked":
+                sorted = sorted.sort((a, b) => b.likesCount - a.likesCount)
+                break
+            case "mostCommented":
+                sorted = sorted.sort(
+                    (a, b) => b.commentsCount - a.commentsCount,
+                )
+                break
+            case "relevance":
+                sorted = sorted.sort(
+                    (a, b) => b.relevanceScore - a.relevanceScore,
+                )
+                break
+            default:
+                sorted = sorted.sort(
+                    (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+                )
+                break
+        }
 
         return {
             mode,
-            count: rows.length,
-            rows,
+            count: sorted.length,
+            rows: sorted,
         }
     }
+
 
     @Get(":id/comments")
     async getComments(@Param("id", ParseIntPipe) id: number) {
@@ -99,13 +157,22 @@ export class PostsController {
             throw new NotFoundException("Post not found")
         }
 
-        const comments = await this.postsService.getComments(id)
+        const comments = await this.prisma.comment.findMany({
+            where: { postId: id },
+            orderBy: { createdAt: "desc" },
+        })
+
+        // CommentMapper transforma cada comentario crudo a CommentEntity:
+        const entities = comments.map((comment) =>
+            CommentMapper.toEntity(comment),
+        )
 
         return {
-            total_comments: comments.length,
-            comments,
+            total_comments: entities.length,
+            comments: entities,
         }
     }
+
 
     @Post(":id/comments")
     async createComment(
@@ -127,11 +194,13 @@ export class PostsController {
 
         if (result.blocked) {
             throw new BadRequestException("Comment blocked by moderation")
-
         }
 
-        // se persiste la informacion en la base de datos
-        const created = await this.postsService.createComment(id, body)
+        const command = new CreateCommentCommand(this.prisma, id, body)
+        const created = await command.execute()
+
+        // CommentMapper transforma el comentario creado a CommentEntity
+        const entity = CommentMapper.toEntity(created)
 
         logDomainEvent("comment.created", { postId: id, commentId: created.id })
         fakeSendNotification("comment", { postId: id })
@@ -139,7 +208,7 @@ export class PostsController {
 
         return {
             message: "comment_created",
-            entity: created,
+            entity,
         }
     }
 
@@ -160,7 +229,11 @@ export class PostsController {
             throw new BadRequestException("Weight must be at least 1")
         }
 
-        const like = await this.postsService.addLike(id, body)
+        const command = new LikePostCommand(this.prisma, id, body)
+        const like = await command.execute()
+
+        // LikeMapper transforma el like creado a LikeEntity:
+        const entity = LikeMapper.toEntity(like)
 
         logDomainEvent("like.created", { postId: id, likeId: like.id })
         fakeSendNotification("like", { postId: id, reactionType })
@@ -168,7 +241,7 @@ export class PostsController {
 
         return {
             success: true,
-            like,
+            like: entity,
         }
     }
 }

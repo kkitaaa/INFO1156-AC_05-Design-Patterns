@@ -82,7 +82,7 @@ export class CommentRepository {
     async updateModerationState(id: number, state: string) {
         return this.prisma.comment.update({
             where: { id },
-            data: { moderationState: state },
+            data: {},
         })
     }
 }

@@ -18,7 +18,12 @@ export class LikeFactory {
      * @param now - Timestamp actual
      * @returns LikeEntity
      */
-    createFromDto(postId: number, dto: AddLikeDto, id: number, now: Date): LikeEntity {
+    createFromDto(
+        postId: number,
+        dto: AddLikeDto,
+        id: number,
+        now: Date,
+    ): LikeEntity {
         const reactionType = dto.reactionType ?? "like"
         const weight = dto.weight ?? 1
 
@@ -27,8 +32,8 @@ export class LikeFactory {
             postId,
             reactionType,
             this.validateAndNormalizeWeight(weight, reactionType),
-            now, // createdAt
             "api", // source
+            now, // createdAt
             this.getStrengthLabel(reactionType, weight), // etiqueta de fortaleza
             this.shouldAffectRelevance(reactionType), // ¿afecta el ranking?
             {}, // metadata vacío
@@ -56,8 +61,8 @@ export class LikeFactory {
             data.postId,
             data.reactionType,
             weight,
-            data.createdAt,
             data.source ?? "unknown",
+            data.createdAt,
             data.strengthLabel ?? this.getStrengthLabel(data.reactionType, weight),
             data.shouldAffectRelevanceScore ?? this.shouldAffectRelevance(data.reactionType),
             data.metadata ?? {},
@@ -72,7 +77,10 @@ export class LikeFactory {
      * - "fire": peso máximo 3 (más expresivo)
      * - "clap": peso máximo 10 (applauso múltiple)
      */
-    private validateAndNormalizeWeight(weight: number, reactionType: string): number {
+    private validateAndNormalizeWeight(
+        weight: number,
+        reactionType: string,
+    ): number {
         const maxWeights: Record<string, number> = {
             like: 1,
             fire: 3,
@@ -80,7 +88,10 @@ export class LikeFactory {
         }
 
         const maxWeight = maxWeights[reactionType] ?? 1
-        const normalized = Math.min(Math.max(weight, 1), maxWeight)
+        const normalized = Math.min(
+            Math.max(weight, 1),
+            maxWeight,
+        )
 
         return normalized
     }
@@ -88,7 +99,10 @@ export class LikeFactory {
     /**
      * MÉTODO PRIVADO - Obtiene la etiqueta de fortaleza de la reacción
      */
-    private getStrengthLabel(reactionType: string, weight: number): string {
+    private getStrengthLabel(
+        reactionType: string,
+        weight: number,
+    ): string {
         if (reactionType === "clap") {
             if (weight >= 5) return "standing-ovation"
             if (weight >= 3) return "strong-clap"
@@ -105,13 +119,14 @@ export class LikeFactory {
 
     /**
      * MÉTODO PRIVADO - Determina si la reacción afecta el score de relevancia
-     *
      * No todos los likes afectan el ranking:
-     * - Reacciones "fire" siempre afectan
-     * - Aplausos múltiples ("clap" con peso > 5) afectan
-     * - Simples "like" no afectan tanto
      */
-    private shouldAffectRelevance(reactionType: string): boolean {
-        return reactionType === "fire" || reactionType === "clap"
+    private shouldAffectRelevance(
+        reactionType: string,
+    ): boolean {
+        return (
+            reactionType === "fire" ||
+            reactionType === "clap"
+        )
     }
 }
